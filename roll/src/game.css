@@ -339,8 +339,8 @@ h1 {
     display: grid;
     opacity: 0.2;
     gap: 8px;
-    width: max-content * 2;
-    height: max-content * 2;
+    width: 200vw;
+    height: 200vh;
     transform-origin: 0 0;
     animation: grid-slide 60s linear infinite
 }
@@ -353,11 +353,21 @@ h1 {
 
 @keyframes grid-slide {
     0% {
-        transform: translate(-10%, 10%) rotate(-5deg)
+        transform: translate(-10%, 10%) rotate(-5deg);
+        opacity: 0
+    }
+
+    5% {
+        opacity: 0.2;
+    }
+
+    95% {
+        opacity: 0.2;
     }
 
     100% {
-        transform: translate(10%, -10%) rotate(-5deg)
+        transform: translate(10%, -10%) rotate(-5deg);
+        opacity: 0
     }
 }
 

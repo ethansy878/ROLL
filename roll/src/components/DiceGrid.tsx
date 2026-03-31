@@ -10,7 +10,7 @@ const DIE_LAYOUT: Record<number, number[]> = {
   6: [0, 3, 6, 2, 5, 8],
 }
 
-export default function DiceGrid({ cols = 30, rows = 20, tile = 64 }: { cols?: number; rows?: number; tile?: number }) {
+export default function DiceGrid({ cols = 60, rows = 50, tile = 64 }: { cols?: number; rows?: number; tile?: number }) {
   const cells = useMemo(() => {
     const arr: number[] = []
     for (let i = 0; i < cols * rows; i++) arr.push(Math.floor(Math.random() * 6) + 1)
