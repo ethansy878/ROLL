@@ -35,8 +35,9 @@ jobs:
         with:
           node-version: lts/*
           cache: 'npm'
-      - name: Install dependencies
+      - name: Change directory
         run: cd roll
+      - name: Install dependencies
         run: npm ci
       - name: Build
         run: npm run build
