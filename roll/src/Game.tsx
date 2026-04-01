@@ -1,15 +1,19 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import './game.css'
-import PointModal from './components/PointModal'
-import PostModal from './components/PostModal'
+import CombinedModal from './components/CombinedModal'
 import DiceGrid from './components/DiceGrid'
 
 type Attr = { label?: string; color?: string }
 
-const NUMBERS = Array.from({ length: 11 }, (_, i) => i + 2)
-const WORD_NUMBERS = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE"]
+const WORD_NUMBERS = [
+    'ZERO','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE',
+    'THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN','TWENTY',
+    'TWENTY-ONE','TWENTY-TWO','TWENTY-THREE','TWENTY-FOUR'
+]
 
-function clamp(n: number, a = 2, b = 12) {
+function clamp(n: number, diceCount = 2) {
+    const a = Math.max(1, diceCount)
+    const b = diceCount * 6
     return Math.max(a, Math.min(b, n))
 }
 
@@ -61,6 +65,8 @@ export default function Game() {
     const [phase, setPhase] = useState<'comeout' | 'point' | 'ended'>('comeout')
     const [die1, setDie1] = useState<number>(1)
     const [die2, setDie2] = useState<number>(1)
+    const [die3, setDie3] = useState<number>(1)
+    const [die4, setDie4] = useState<number>(1)
     const [rolling, setRolling] = useState(false)
 
     const [score, setScore] = useState(0)
@@ -99,12 +105,30 @@ export default function Game() {
     const [faceAttrMap, setFaceAttrMap] = useState<Record<number, Attr>>({})
 
     const [showPointModal, setShowPointModal] = useState(false)
+    const [allCyclesCompleted, setAllCyclesCompleted] = useState(false)
+    const [comeoutLosingCount, setComeoutLosingCount] = useState(0)
+
+    // scoreboard digits and animation state
+    const [displayDigits, setDisplayDigits] = useState<string[]>(String(score).padStart(8, '0').split(''))
+    const prevScoreRef = useRef<number>(score)
+    const digitTimeoutsRef = useRef<number[]>([])
+    const pendingTargetDigitsRef = useRef<string[] | null>(null)
+    const [animatingDigits, setAnimatingDigits] = useState<boolean[]>(Array(8).fill(false))
+
+    function comeoutDamageForCount(count: number) {
+        if (count <= 1) return 0
+        if (count === 2) return 5
+        if (count === 3) return 10
+        if (count === 4) return 20
+        if (count === 5) return 40
+        if (count === 6) return 80
+        return 100
+    }
 
     const roll = () => {
         // block rolling when other UI modals are visible (still block when result shown or post modal active)
         if (rolling || resultModal.visible || awaitingPost) return
 
-        const isFirstRoll = rollCount === 0
         setRollCount((r) => r + 1)
 
         // decide pre-adjust and consume only if available
@@ -118,36 +142,44 @@ export default function Game() {
 
         setRolling(true)
 
-        const r1 = Math.floor(Math.random() * 6) + 1
-        const r2 = Math.floor(Math.random() * 6) + 1
+        const diceCount = 2 + (cycle >= 3 ? 1 : 0) + (cycle >= 5 ? 1 : 0)
+        const rolls: number[] = Array.from({ length: diceCount }, () => Math.floor(Math.random() * 6) + 1)
 
-        // independent animations
+        // set all dice to rolling face
         setDie1(0)
         setDie2(0)
-        const d1Delay = 350 + Math.random() * 400
-        const d2Delay = 350 + Math.random() * 400
-        setTimeout(() => setDie1(r1), d1Delay)
-        setTimeout(() => setDie2(r2), d2Delay)
+        if (diceCount >= 3) setDie3(0)
+        if (diceCount >= 4) setDie4(0)
 
-        const maxDelay = Math.max(d1Delay, d2Delay) + 120
+        const delays = rolls.map(() => 350 + Math.random() * 400)
+        // set them back individually
+        setTimeout(() => setDie1(rolls[0]), delays[0])
+        setTimeout(() => setDie2(rolls[1]), delays[1])
+        if (diceCount >= 3) setTimeout(() => setDie3(rolls[2]), delays[2])
+        if (diceCount >= 4) setTimeout(() => setDie4(rolls[3]), delays[3])
+
+        const maxDelay = Math.max(...delays) + 120
         setTimeout(() => {
-            const raw = r1 + r2
+            const raw = rolls.reduce((a, b) => a + b, 0)
             setRawResult(raw)
-            const adjusted = clamp(raw + usedPre)
+            const adjusted = clamp(raw + usedPre, diceCount)
             setFinalResult(adjusted)
             // mark the last rolled number for the bottom GUI
             setLastRoll(adjusted)
 
+            const losing = getLosingValues(diceCount)
+
             if (phase === 'comeout') {
-                if (adjusted === 7) {
-                    // show modal telling the user to roll again (no End Game option here)
-                    setResultModal({ visible: true, text: 'Rolled a 7 — roll again.', allowEnd: false })
+                if (losing.includes(adjusted)) {
+                    const losingStr = losing.join(' or ')
+                    setResultModal({ visible: true, text: `Rolled a ${losingStr} — roll again.`, allowEnd: false })
+                    setComeoutLosingCount(comeoutLosingCount + 1)
                     setShowPointModal(true)
                     setRolling(false)
                 } else {
                     setPoint(adjusted)
                     // if this was the very first roll of the game, mark zero-cycle
-                    if (isFirstRoll) setZeroCycleActive(true)
+                    setZeroCycleActive(true)
                     setPhase('point')
                     setShowPointModal(true)
                     setRolling(false)
@@ -168,7 +200,8 @@ export default function Game() {
         if (delta === 1) setPostPlus((p) => Math.max(0, p - 1))
         if (delta === -1) setPostMinus((p) => Math.max(0, p - 1))
 
-        const newFinal = clamp((finalResult || 0) + delta)
+        const diceCount = 2 + (cycle >= 3 ? 1 : 0) + (cycle >= 5 ? 1 : 0)
+        const newFinal = clamp((finalResult || 0) + delta, diceCount)
         setFinalResult(newFinal)
         setAwaitingPost(false)
         evaluatePoint(newFinal)
@@ -183,6 +216,10 @@ export default function Game() {
     const evaluatePoint = (value: number) => {
         // remember value for later continue/end decisions
         setLastEvaluated(value)
+        // reflect the evaluated value (including post-adjust edits) in the V marker
+        setLastRoll(value)
+        const diceCount = 2 + (cycle >= 3 ? 1 : 0) + (cycle >= 5 ? 1 : 0)
+        const losing = getLosingValues(diceCount)
         const dmg = hpDamageMap[value] || 0
         const nextHp = Math.max(0, hp - dmg)
         let nextLives = lives
@@ -199,16 +236,18 @@ export default function Game() {
             } else {
                 finalMsg = `You rolled the Point (${value}) — +100 points!`
             }
-            setCycle(cycle + 1)
-        } else if (value === 7) {
+        } else if (losing.includes(value)) {
             nextLives = Math.max(0, lives - 1)
-            finalMsg = `Rolled a 7 — lost 1 life.`
-            setCycle(cycle + 1)
+            finalMsg = `Rolled a ${value} — lost 1 life.`
         } else {
             deltaScore = 10
             finalMsg = `Rolled ${value} — +10 points.`
-            // continue the point cycle (do not end the point when neither the point nor 7 are rolled)
+            setZeroCycleActive(false)
+            // continue the point cycle (do not end the point when neither the point nor losing values are rolled)
         }
+
+        // if this roll finished the cycle (point or losing value), increment or end
+        const finishedCycle = value === point || losing.includes(value)
 
         if (deltaScore) setScore((s) => s + deltaScore)
         if (dmg) setHp(nextHp)
@@ -216,14 +255,7 @@ export default function Game() {
 
         // auto-end if HP or lives hit zero
         if (nextLives <= 0) {
-            // immediate redirect when lives reach 0
-            const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-            try {
-                // navigate away immediately
-                window.location.href = url
-            } catch (e) {
-                try { window.open(url, '_blank') } catch {}
-            }
+            // end game; will be rendered via the ended screen
             setPhase('ended')
             return
         }
@@ -232,8 +264,9 @@ export default function Game() {
             return
         }
 
-        // show result modal; allow 'End Game' only when rolling the Point or a 7 during point cycle
-        setResultModal({ visible: true, text: finalMsg, allowEnd: value === point || value === 7 })
+        // Do not change cycle or end the game immediately here. Show the result modal
+        // and perform cycle increment / final end only after the player clicks Continue.
+        setResultModal({ visible: true, text: finalMsg, allowEnd: false })
     }
 
     const handleResultContinue = () => {
@@ -244,12 +277,35 @@ export default function Game() {
         setRawResult(null)
         setFinalResult(null)
         setAwaitingPost(false)
+        // If this result was shown during a comeout (e.g. "rolled a 7 — roll again"),
+        // simply dismiss the message and return to comeout.
+        if (phase === 'comeout') {
+            setShowPointModal(false)
+            setLastRoll(null)
+            return
+        }
 
-        // if the roll ended the cycle (point or 7), return to comeout and hide the point modal
-        if (val === point || val === 7) {
+        // Otherwise we are in a point cycle — if this roll finished the cycle,
+        // perform the cycle increment or end the game now (after the player clicked Continue).
+        const diceCount = 2 + (cycle >= 3 ? 1 : 0) + (cycle >= 5 ? 1 : 0)
+        const losing = getLosingValues(diceCount)
+        const finished = val != null && (val === point || losing.includes(val))
+        if (finished) {
+            if (cycle >= 6) {
+                setAllCyclesCompleted(true)
+                setShowPointModal(false)
+                setPhase('ended')
+                return
+            }
+            // advance to next cycle after Continue
+            setCycle((c) => c + 1)
             setPhase('comeout')
             setPoint(null)
             setShowPointModal(false)
+            // reset comeout-losing tracking for the new comeout
+            setComeoutLosingCount(0)
+            setLastRoll(null)
+            return
         }
         // otherwise keep the point modal visible and continue the cycle
     }
@@ -266,6 +322,7 @@ export default function Game() {
         setHp(100)
         setPoint(null)
         setPhase('comeout')
+        setAllCyclesCompleted(false)
         setPrePlus(3)
         setPreMinus(3)
         setPostPlus(3)
@@ -297,21 +354,130 @@ export default function Game() {
         setFaceAttr,
     }
 
-    if (phase === 'ended') {
-        return (
-            <div className="game-root ended">
-                <div className="final">
-                    <h1>Game Over</h1>
-                    <p>Score: {score}</p>
-                    <p>Lives: {lives}</p>
-                    <p>HP: {hp}</p>
-                    <button onClick={resetGame}>Play again</button>
-                </div>
-            </div>
-        )
+    function getLosingValues(diceCount: number) {
+        if (diceCount === 2) return [7]
+        if (diceCount === 3) return [10, 11]
+        if (diceCount === 4) return [13, 14, 15]
+        return [7]
     }
+
+    const diceCount = 2 + (cycle >= 3 ? 1 : 0) + (cycle >= 5 ? 1 : 0)
+    const minSum = Math.max(1, diceCount)
+    const maxSum = diceCount * 6
+    const NUMBERS = Array.from({ length: maxSum - minSum + 1 }, (_, i) => i + minSum)
+
+    // format score as 8 digits with muted leading zeros
+    const formattedScore = String(score).padStart(8, '0')
+    const firstNonZero = formattedScore.search(/[^0]/) === -1 ? formattedScore.length : formattedScore.search(/[^0]/)
+
+    // (end-screen rendering moved into the main return to avoid early-return hook mismatch)
+
+    // handle redirects on end screen
+    useEffect(() => {
+        if (phase !== 'ended') return
+        const grade = computeGrade()
+        let t: any = null
+        if (grade === 'SS') {
+            // show message then redirect after 3s
+            t = setTimeout(() => {
+                try { window.location.href = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } catch (e) { try { window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank') } catch {} }
+            }, 3000)
+        } else if (grade === 'F') {
+            t = setTimeout(() => {
+                try { window.location.href = 'https://www.youtube.com/watch?v=b1cTSxu8O8c' } catch (e) { try { window.open('https://www.youtube.com/watch?v=b1cTSxu8O8c', '_blank') } catch {} }
+            }, 3000)
+        }
+        return () => { if (t) clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase])
+
+    function computeGrade() {
+        if (lives <= 0) return 'F'
+        if (score > 2000 && allCyclesCompleted) return 'SS'
+        if (score > 1500) return 'S'
+        if (score > 1000) return 'A'
+        if (score > 500) return 'B'
+        return 'C'
+    }
+
+    // animate scoreboard digits using CSS ::before/::after slides
+    useEffect(() => {
+        const prev = prevScoreRef.current
+        if (prev === score) return
+
+        const prevDigits = String(prev).padStart(8, '0').split('')
+        const targetDigits = String(score).padStart(8, '0').split('')
+
+        // clear any running timers
+        digitTimeoutsRef.current.forEach((id) => clearTimeout(id))
+        digitTimeoutsRef.current = []
+
+        // prepare pending target digits for ::after content
+        pendingTargetDigitsRef.current = targetDigits
+
+        // set which digits should animate
+        const toAnimate = prevDigits.map((pd, i) => pd !== targetDigits[i])
+        setAnimatingDigits(toAnimate)
+
+        // keep current display as the previous digits until individual animations finish
+        setDisplayDigits(prevDigits)
+
+        // stagger stopping so digits settle left->right
+        const base = 420
+        for (let i = 0; i < targetDigits.length; i++) {
+            if (!toAnimate[i]) continue
+            const stopAfter = base + i * 80
+            const t = window.setTimeout(() => {
+                setDisplayDigits((s) => {
+                    const copy = [...s]
+                    copy[i] = targetDigits[i]
+                    return copy
+                })
+                setAnimatingDigits((arr) => {
+                    const copy = [...arr]
+                    copy[i] = false
+                    return copy
+                })
+            }, stopAfter)
+            digitTimeoutsRef.current.push(t)
+        }
+
+        // final cleanup after all digits finished
+        const finalTimer = window.setTimeout(() => {
+            pendingTargetDigitsRef.current = null
+            prevScoreRef.current = score
+            setAnimatingDigits(Array(8).fill(false))
+        }, base + targetDigits.length * 80 + 50)
+        digitTimeoutsRef.current.push(finalTimer)
+
+        return () => {
+            digitTimeoutsRef.current.forEach((id) => clearTimeout(id))
+            digitTimeoutsRef.current = []
+            pendingTargetDigitsRef.current = null
+        }
+    }, [score])
+    const rootClass = "game-root " + (phase === 'point' ? 'point-active' : '') + (phase === 'ended' ? ' ended' : '')
+
     return (
-        <div className={"game-root " + (phase === 'point' ? 'point-active' : '')}>
+        <div className={rootClass}>
+            {phase === 'ended' ? (
+                <div className="final">
+                    <div className="final-scoreboard">
+                        {String(score).padStart(8, '0').split('').map((d, i) => (
+                            <span key={i} className={"digit " + (i < firstNonZero ? 'muted' : '')}>{d}</span>
+                        ))}
+                        <span className="score-icon">💰</span>
+                    </div>
+                    <div className="meter">
+                        <div className="meter-track">
+                            <div className="meter-fill" style={{ width: `${Math.max(0, Math.min(100, Math.round((score / 2000) * 100)))}%` }} />
+                            <div className="marker" style={{ left: `${Math.max(0, Math.min(100, Math.round((score / 2000) * 100)))}%` }}>{computeGrade()}</div>
+                        </div>
+                    </div>
+                    <h3 className="grade-letter">{computeGrade()}</h3>
+                </div>
+            ) : (
+                <>
             {phase === 'point' && (
                 <>
                     <div className="page-bg" aria-hidden />
@@ -335,15 +501,17 @@ export default function Game() {
                 </div>
             </header> */}
 
-            <main className={"play-area" + ((resultModal.visible || awaitingPost) ? ' modal-open' : '')}>
+                    <main className={"play-area" + ((resultModal.visible || awaitingPost) ? ' modal-open' : '')}>
                 <h1 className="main-title">{phase === 'comeout' ? 'Roll.' : `Cycle ${cycle}`}</h1> <br/>
 
                 <div className="dice-row">
                     <Dice value={die1} rolling={rolling && die1 === 0} onClick={roll} faceAttr={faceAttrMap[die1]} />
                     <Dice value={die2} rolling={rolling && die2 === 0} onClick={roll} faceAttr={faceAttrMap[die2]} />
+                    {diceCount >= 3 && <Dice value={die3} rolling={rolling && die3 === 0} onClick={roll} faceAttr={faceAttrMap[die3]} />}
+                    {diceCount >= 4 && <Dice value={die4} rolling={rolling && die4 === 0} onClick={roll} faceAttr={faceAttrMap[die4]} />}
                 </div> <br/> <br/>
 
-                {phase === 'point' && (
+                {(phase === 'point' || comeoutLosingCount > 0) && (
                     <div className="health-row">
                         <div className="heart">❤
                             <div className="lives-text">x{lives}</div>
@@ -383,57 +551,51 @@ export default function Game() {
 
                 {/* result messages are shown in modal */}
 
-                {showPointModal &&
-                    <PointModal
+                {/* single combined modal shown below the health bar (render whenever a modal state is active) */}
+                {(showPointModal || resultModal.visible || awaitingPost) && (
+                    <CombinedModal
                         point={point}
                         result={resultModal.visible ? { text: resultModal.text, allowEnd: resultModal.allowEnd } : null}
+                        awaitingPost={awaitingPost}
+                        raw={rawResult}
+                        final={finalResult != null ? WORD_NUMBERS[finalResult] : null}
+                        losing={getLosingValues(diceCount)}
+                        postPlus={postPlus}
+                        postMinus={postMinus}
+                        onApply={applyPostAdjust}
+                        onAccept={finalizeNoPost}
                         onResultContinue={handleResultContinue}
                         onResultEnd={handleResultEnd}
                     />
-                }
+                )}
 
                 <section className="bottom-panel">
                     <div className="numbers">
                         {NUMBERS.map((n) => {
                             const attr = numAttrMap[n]
                             const style: React.CSSProperties = {}
-                            style.zIndex = 10;
-                            if (n === 7) style.background = '#ff6b6b'
-                            if (n === 7 && phase === 'comeout') style.background = '#81e6d9'
+                            style.zIndex = 10
+                            const losing = getLosingValues(diceCount)
+                            // highlight the current point first
                             if (n === point) style.background = '#81e6d9'
+                            else if (losing.includes(n)) {
+                                if (phase === 'comeout') {
+                                    // after first comeout losing roll, mark losing numbers purple
+                                    if (comeoutLosingCount > 0) style.background = '#7c3aed'
+                                    else style.background = '#81e6d9'
+                                } else {
+                                    style.background = '#ff6b6b'
+                                }
+                            }
                             if (attr && attr.color) style.background = attr.color
-                                return (
+                            return (
                                 <div key={n} className="num" style={style}>
                                     {lastRoll === n && <div className="v-marker">V</div>}
                                     <div className="num-label">{n}{attr && attr.label ? ` • ${attr.label}` : ''}</div>
-                                    {/* <input
-                                        type="color"
-                                        title="attribute color"
-                                        value={(attr && attr.color) || '#000000'}
-                                        onChange={(e) => setNumberAttr(n, { ...(attr || {}), color: e.target.value })}
-                                    />
-                                    <input
-                                        className="hp-input"
-                                        type="number"
-                                        min={0}
-                                        placeholder="HP dmg"
-                                        value={hpDamageMap[n] ?? ''}
-                                        onChange={(e) => setHpDamage(n, Number(e.target.value) || 0)}
-                                    />
-                                    <input
-                                        className="label-input"
-                                        placeholder="label"
-                                        value={(attr && attr.label) || ''}
-                                        onChange={(e) => setNumberAttr(n, { ...(attr || {}), label: e.target.value })}
-                                    /> */}
                                 </div>
                             )
                         })}
                     </div>
-
-                {awaitingPost && finalResult != null && (
-                    <PostModal raw={rawResult} final={WORD_NUMBERS[finalResult]} postPlus={postPlus} postMinus={postMinus} onApply={applyPostAdjust} onAccept={finalizeNoPost} />
-                )}
 
 
                     {/* <div className="face-config">
@@ -467,8 +629,26 @@ export default function Game() {
                 {/* dice-grid background component */}
                 {phase === 'point' && <DiceGrid />}
 
-                <h1 className="points">{`Points: ${score}`}</h1>
-            </main>
+                <div className="scoreboard">
+                    {displayDigits.map((d, i) => {
+                        const oldDigit = d
+                        const newDigit = pendingTargetDigitsRef.current ? pendingTargetDigitsRef.current[i] : d
+                        const isRolling = animatingDigits[i]
+                        return (
+                            <span
+                                key={i}
+                                className={"digit " + (i < firstNonZero ? 'muted' : '') + (isRolling ? ' rolling' : '')}
+                                data-old={oldDigit}
+                                data-new={newDigit}
+                                aria-label={`Score digit ${i + 1}`}
+                            />
+                        )
+                    })}
+                    <span className="score-icon">💰</span>
+                </div>
+                    </main>
+                </>
+            )}
         </div>
     )
 }
