@@ -52,6 +52,8 @@ export default function PointModal({ point, result = null, onResultContinue, onR
                         </div>
                     </div>
                 )}
+
+                {false && setClosing(false)}
             </div>
         </div>
     )

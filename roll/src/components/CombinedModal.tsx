@@ -20,6 +20,7 @@ type Props = {
 
 export default function CombinedModal({ point, result = null, awaitingPost = false, raw = null, final = null, postPlus = 0, postMinus = 0, onApply, onAccept, onResultContinue, onResultEnd, losing }: Props) {
   const losingStr = (propsLosing: number[] | undefined) => {
+    raw;
     if (!propsLosing || propsLosing.length === 0) return '7'
     if (propsLosing.length === 1) return String(propsLosing[0])
     return propsLosing.join(' or ')

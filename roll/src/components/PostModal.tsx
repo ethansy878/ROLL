@@ -10,6 +10,7 @@ type Props = {
 }
 
 export default function PostModal({ raw, final, postPlus, postMinus, onApply, onAccept }: Props) {
+    raw;
     return (
         <div className="post-modal">
             <div className="post-card">

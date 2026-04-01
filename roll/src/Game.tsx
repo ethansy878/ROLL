@@ -383,6 +383,7 @@ export default function Game() {
         if (finished) {
             if (cycle >= 6) {
                 setAllCyclesCompleted(true)
+                allCyclesCompleted;
                 setShowPointModal(false)
                 setPhase('ended')
                 return
@@ -505,7 +506,7 @@ export default function Game() {
             t = setTimeout(() => {
                 try { window.location.href = 'https://www.youtube.com/watch?v=yPYZpwSpKmA' } catch (e) { try { window.open('https://www.youtube.com/watch?v=yPYZpwSpKmA', '_blank') } catch {} }
             }, 3000)
-        } else if (grade === 'X') {
+        } else {
             new Audio('audio/Wompwomp.mp3').play();
             t = setTimeout(() => {
                 try { window.location.href = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } catch (e) { try { window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank') } catch {} }
@@ -621,7 +622,7 @@ export default function Game() {
                         </div>
                     </div>
                     <h3 className="grade-letter">Rating: {computeGrade()}</h3>
-                    {computeGrade() !== 'S' && computeGrade() !== 'X' && <div className="intro">Good job, but not enough funds for Yoshie.</div>}
+                    {computeGrade() !== 'S' && computeGrade() !== 'X' && <div className="intro">Good job, but not enough funds for Yoshie. Teleporting in 5 seconds...</div>}
                     {computeGrade() === 'X' && <div className="intro">YOU DIED... Teleporting in 5 seconds...</div>}
                     {computeGrade() === 'S' && <div className="intro">YOU CLEARED THE CHALLENGE! Teleporting in 5 seconds...</div>}
                 </div>
@@ -829,7 +830,7 @@ export default function Game() {
                 <button onClick={buyPostSub} disabled={score < postSubCost}>Buy  Post-Sub (x{postMinus}) — {postSubCost}💰</button>
             </div>}
             {cycle === 3 && phase !== 'ended' && <div className="intro">
-                Watch out, here comes another dice into play.
+                Watch out! Another dice comes into play.
             </div>
             }
             {cycle === 5 && phase !== 'ended' && <div className="intro">
