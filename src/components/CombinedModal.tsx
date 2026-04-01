@@ -57,6 +57,7 @@ export default function CombinedModal({ point, result = null, awaitingPost = fal
         {awaitingPost && final != null ? (
           <div className="post-section">
             <h3>{final}</h3>
+              Adjust? <br/>
             <div className="post-actions">
               <button onClick={() => onApply && onApply(-1)} disabled={postMinus! <= 0}>-1 (x{postMinus})</button>
               <button onClick={() => onAccept && onAccept()}>Accept</button>

@@ -162,14 +162,14 @@ h1 {
 
 .num .num-label.stormy {
     color: #7c3aed;
-    animation: storm-shake 0.9s ease-in-out infinite;
+    animation: storm-shake 0.5s ease-in-out infinite;
 }
 
 @keyframes storm-shake {
     0% { transform: translateX(0) }
-    25% { transform: translateX(-1px) }
-    50% { transform: translateX(1px) }
-    75% { transform: translateX(-1px) }
+    25% { transform: translateX(-2px) }
+    50% { transform: translateX(2px) }
+    75% { transform: translateX(-2px) }
     100% { transform: translateX(0) }
 }
 
@@ -210,7 +210,6 @@ h1 {
     align-items: center;
     justify-content: center;
 }
-.shop button { padding: 8px 12px }
 
 .hp-input {
     width: 60px
@@ -743,8 +742,13 @@ button:disabled {
 
 .storm {
     color: #7c3aed;
+    animation: storm-shake 0.5s ease-in-out infinite;
 }
 
 .shop {
     font-family: 'HSR', sans-serif;
+}
+
+.shop button {
+    height: 100%;
 }

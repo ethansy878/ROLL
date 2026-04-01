@@ -6,6 +6,7 @@ import DiceGrid from './components/DiceGrid'
 type Attr = { label?: string; color?: string }
 
 const bgm = new Audio('audio/Cosmicon.mp3')
+bgm.loop = true;
 
 const WORD_NUMBERS = [
     'ZERO','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE',
@@ -222,11 +223,11 @@ export default function Game() {
 
             if (phase === 'comeout') {
                 if (losing.includes(adjusted)) {
-                    setResultModal({ visible: true, text: `Roll again.`, allowEnd: false })
+                    setResultModal({ visible: true, text: `Free budget, roll again.`, allowEnd: false })
                     setComeoutLosingCount(comeoutLosingCount + 1)
-                    setScore(score + comeoutLosingCount)
+                    setScore(score + (comeoutLosingCount + 1) * 100)
                     if (comeoutDamageForCount(comeoutLosingCount) > 0)
-                        new Audio('audio/Hit.wav').play()
+                        new Audio('audio/Hit2.wav').play()
                     setHp(hp - comeoutDamageForCount(comeoutLosingCount))
                     setShowPointModal(true)
                     setRolling(false)
@@ -337,7 +338,7 @@ export default function Game() {
         }
 
         if (deltaScore) setScore((s) => s + deltaScore)
-        if (totalDmg) {setHp(nextHp); new Audio('audio/Hit.wav').play(); }
+        if (totalDmg) {setHp(nextHp); new Audio('audio/Hit2.wav').play(); }
 
         if (nextHp <= 0) {
             nextLives = Math.max(0, lives - 1)
@@ -483,10 +484,10 @@ export default function Game() {
     const maxSum = diceCount * 6
     const NUMBERS = Array.from({ length: maxSum - minSum + 1 }, (_, i) => i + minSum)
 
-    const preAddCost = 10 + 2 * preAddBought
-    const preSubCost = 10 + 2 * preSubBought
-    const postAddCost = 50 * Math.pow(2, postAddBought)
-    const postSubCost = 50 * Math.pow(2, postSubBought)
+    const preAddCost = 5 * Math.pow(2, preAddBought)
+    const preSubCost = 5 * Math.pow(2, preSubBought)
+    const postAddCost = 100 * Math.pow(2, postAddBought)
+    const postSubCost = 100 * Math.pow(2, postSubBought)
 
     // format score as 8 digits with muted leading zeros
     const formattedScore = String(score).padStart(5, '0')
@@ -502,10 +503,10 @@ export default function Game() {
         let t: any = null
         if (grade === 'S') {
             // show message then redirect after 3s
-            new Audio('audio/Tada.mp3').play();
+            new Audio('audio/Applause.mp3').play();
             t = setTimeout(() => {
                 try { window.location.href = 'https://www.youtube.com/watch?v=yPYZpwSpKmA' } catch (e) { try { window.open('https://www.youtube.com/watch?v=yPYZpwSpKmA', '_blank') } catch {} }
-            }, 3000)
+            }, 5000)
         } else {
             new Audio('audio/Wompwomp.mp3').play();
             t = setTimeout(() => {
@@ -797,19 +798,19 @@ export default function Game() {
                 You have 6 cycles to make 10,000 budget. <br/>
                 Clear the challenge, and get blessed by Yoshie. <br/>
                 Poverty or death? Get memed. <br/>
-                (VOLUME WARNING: Turn your sound LOW but not off :))
+                (VOLUME WARNING...)
             </div>
             }
             {cycle >= 2 && phase === 'comeout' && <div className="intro">
                 Click the numbers to upgrade them. <br/>
-                Purchase adds and subs below:
+                Purchase subs and adds below:
             </div>
             }
             {cycle >= 2 && phase == 'comeout' && <div className="shop">
-                <button onClick={buyPreAdd} disabled={score < preAddCost}>Buy a Pre-Add (x{prePlus}) — {preAddCost}💰</button>
-                <button onClick={buyPreSub} disabled={score < preSubCost}>Buy a Pre-Sub (x{preMinus}) — {preSubCost}💰</button>
-                <button onClick={buyPostAdd} disabled={score < postAddCost}>Buy a Post-Add (x{postPlus}) — {postAddCost}💰</button>
-                <button onClick={buyPostSub} disabled={score < postSubCost}>Buy  Post-Sub (x{postMinus}) — {postSubCost}💰</button>
+                <button onClick={buyPreSub} disabled={score < preSubCost}>Buy a Pre-Sub ({preMinus} owned) — {preSubCost}💰</button>
+                <button onClick={buyPreAdd} disabled={score < preAddCost}>Buy a Pre-Add ({prePlus} owned) — {preAddCost}💰</button>
+                <button onClick={buyPostSub} disabled={score < postSubCost}>Buy  Post-Sub ({postMinus} owned) — {postSubCost}💰</button>
+                <button onClick={buyPostAdd} disabled={score < postAddCost}>Buy a Post-Add ({postPlus} owned) — {postAddCost}💰</button>
             </div>}
             {cycle === 3 && phase !== 'ended' && <div className="intro">
                 Watch out! Another dice comes into play.

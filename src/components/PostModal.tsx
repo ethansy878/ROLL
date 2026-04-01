@@ -16,7 +16,7 @@ export default function PostModal({ raw, final, postPlus, postMinus, onApply, on
             <div className="post-card">
                 <h3>{final != null ? final : null}</h3>
                 <div className="post-actions">
-                    Options:
+                    Adjust?
                     <button onClick={() => onApply(-1)} disabled={postMinus <= 0}>-1 (x{postMinus} left)</button>
                     <button onClick={onAccept}>Accept</button>
                     <button onClick={() => onApply(1)} disabled={postPlus <= 0}>+1 (x{postPlus} left)</button>
