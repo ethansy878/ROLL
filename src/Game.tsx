@@ -653,9 +653,9 @@ export default function Game() {
                     <div className="pre-controls">
                         <label className="pre-label">Stack Pre-Adjusts</label>
                         <div className="post-actions">
-                            <button onClick={() => setPendingPreAdjust((p) => Math.max(p - 1, -preMinus))} disabled={preMinus <= 0}>-1 (x{preMinus})</button>
+                            <button onClick={() => setPendingPreAdjust((p) => Math.max(p - 1, -preMinus))} disabled={preMinus <= 0}>-1 (x{preMinus} available)</button>
                             <button onClick={() => setPendingPreAdjust(0)}>Clear</button>
-                            <button onClick={() => setPendingPreAdjust((p) => Math.min(p + 1, prePlus))} disabled={prePlus <= 0}>+1 (x{prePlus})</button>
+                            <button onClick={() => setPendingPreAdjust((p) => Math.min(p + 1, prePlus))} disabled={prePlus <= 0}>+1 (x{prePlus} available)</button>
                         </div>
                     </div>
                 </div> }
@@ -797,7 +797,7 @@ export default function Game() {
                 You have 6 cycles to make 10,000 budget. <br/>
                 Clear the challenge, and get blessed by Yoshie. <br/>
                 Poverty or death? Get memed. <br/>
-                (VOLUME WARNING: Turn your sound DOWN)
+                (VOLUME WARNING: Turn your sound LOW but not off :))
             </div>
             }
             {cycle >= 2 && phase === 'comeout' && <div className="intro">

@@ -324,7 +324,10 @@ h1 {
 }
 
 button {
+    text-align: center;
     font-family: inherit;
+    height: 40px;
+    line-height: 40px;
 }
 
 /* pip visuals */
