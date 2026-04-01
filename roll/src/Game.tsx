@@ -17,6 +17,31 @@ function clamp(n: number, diceCount = 2) {
     return Math.max(a, Math.min(b, n))
 }
 
+function stormclamp(n: number) {
+    if (n > 100)
+        return 100
+    return n
+}
+
+function waysToSum(sum: number, diceCount: number) {
+    const max = diceCount * 6
+    const dp: number[] = new Array(max + 1).fill(0)
+    dp[0] = 1
+    for (let d = 0; d < diceCount; d++) {
+        const next = new Array(max + 1).fill(0)
+        for (let s = 0; s <= max; s++) {
+            const ways = dp[s]
+            if (!ways) continue
+            for (let face = 1; face <= 6; face++) {
+                const ns = s + face
+                if (ns <= max) next[ns] += ways
+            }
+        }
+        for (let i = 0; i <= max; i++) dp[i] = next[i]
+    }
+    return dp[sum] || 0
+}
+
 function Dice({
     value,
     rolling,
@@ -86,13 +111,30 @@ export default function Game() {
     const [lastEvaluated, setLastEvaluated] = useState<number | null>(null)
 
     // powerups: three uses each
-    const [prePlus, setPrePlus] = useState(3)
-    const [preMinus, setPreMinus] = useState(3)
+    const [prePlus, setPrePlus] = useState(10)
+    const [preMinus, setPreMinus] = useState(10)
     const [postPlus, setPostPlus] = useState(3)
     const [postMinus, setPostMinus] = useState(3)
 
-    // 0 | 1 | -1 for pending pre-adjust
-    const [pendingPreAdjust, setPendingPreAdjust] = useState<0 | 1 | -1>(0)
+    // pending pre-adjust (can be >1 or < -1 to allow multiple pre-adds/subs)
+    const [pendingPreAdjust, setPendingPreAdjust] = useState<number>(0)
+
+    // Storm state: which numbers are currently stormy (text becomes purple + shaky)
+    const [stormyMap, setStormyMap] = useState<Record<number, boolean>>({})
+
+    // Per-number payout values and upgrade tracking
+    const [numberValueMap, setNumberValueMap] = useState<Record<number, number>>(() => {
+        const m: Record<number, number> = {}
+        for (let i = 1; i <= 24; i++) m[i] = 5
+        return m
+    })
+    const [numberUpgradeLevel, setNumberUpgradeLevel] = useState<Record<number, number>>({})
+
+    // Shop buy counters (for scaling costs)
+    const [preAddBought, setPreAddBought] = useState(0)
+    const [preSubBought, setPreSubBought] = useState(0)
+    const [postAddBought, setPostAddBought] = useState(0)
+    const [postSubBought, setPostSubBought] = useState(0)
 
     // awaiting post-adjust opportunity when in a point cycle
     const [awaitingPost, setAwaitingPost] = useState(false)
@@ -129,18 +171,19 @@ export default function Game() {
         // block rolling when other UI modals are visible (still block when result shown or post modal active)
         if (rolling || resultModal.visible || awaitingPost) return
 
-        setRollCount((r) => r + 1)
         const audio = new Audio('audio/Dice.mp3');
         audio.play();
 
-        // decide pre-adjust and consume only if available
-        let usedPre: 0 | 1 | -1 = pendingPreAdjust
-        if (usedPre === 1 && prePlus <= 0) usedPre = 0
-        if (usedPre === -1 && preMinus <= 0) usedPre = 0
+        // decide pre-adjust and consume only if available (allow multiple uses)
+        let usedPre = pendingPreAdjust
+        if (usedPre > 0 && prePlus <= 0) usedPre = 0
+        if (usedPre < 0 && preMinus <= 0) usedPre = 0
+        // clamp to available counts
+        if (usedPre > prePlus) usedPre = prePlus
+        if (usedPre < -preMinus) usedPre = -preMinus
 
-        if (usedPre === 1) setPrePlus((p) => Math.max(0, p - 1))
-        if (usedPre === -1) setPreMinus((p) => Math.max(0, p - 1))
-        setPendingPreAdjust(0)
+        if (usedPre > 0) setPrePlus((p) => Math.max(0, p - usedPre))
+        if (usedPre < 0) setPreMinus((p) => Math.max(0, p - Math.abs(usedPre)))
 
         setRolling(true)
 
@@ -174,9 +217,11 @@ export default function Game() {
             if (phase === 'comeout') {
                 if (losing.includes(adjusted)) {
                     setResultModal({ visible: true, text: `Roll again.`, allowEnd: false })
-                    setScore(score + 1)
-                    setHp(hp - comeoutDamageForCount(comeoutLosingCount))
                     setComeoutLosingCount(comeoutLosingCount + 1)
+                    setScore(score + comeoutLosingCount)
+                    if (comeoutDamageForCount(comeoutLosingCount) > 0)
+                        new Audio('audio/Hit.wav').play()
+                    setHp(hp - comeoutDamageForCount(comeoutLosingCount))
                     setShowPointModal(true)
                     setRolling(false)
                 } else {
@@ -219,59 +264,87 @@ export default function Game() {
     }
 
     const evaluatePoint = (value: number) => {
+        setPendingPreAdjust(0)
         // remember value for later continue/end decisions
         setLastEvaluated(value)
         // reflect the evaluated value (including post-adjust edits) in the V marker
         setLastRoll(value)
         const diceCount = 2 + (cycle >= 3 ? 1 : 0) + (cycle >= 5 ? 1 : 0)
         const losing = getLosingValues(diceCount)
-        const dmg = hpDamageMap[value] || 0
-        const nextHp = Math.max(0, hp - dmg)
+
+        // storm damage: depends on how many previous continuing rolls have occurred
+        let stormDamage = 0
+        if (rollCount == 2) new Audio('audio/Storm.mp3').play();
+        if (rollCount >= 3 && stormyMap[value]) {
+            stormDamage = Math.pow(2, Math.max(0, rollCount - 3))
+            if (stormDamage >= 128) stormDamage = 100
+        }
+
+        const baseDmg = hpDamageMap[value] || 0
+        let totalDmg = baseDmg + stormDamage
+        const nextHp = Math.max(0, hp - totalDmg)
         let nextLives = lives
         let deltaScore = 0
         let finalMsg = ''
-        let finalMsg2 = ''
-        let finalMsg3 = ''
 
         if (value === point) {
-            deltaScore = 100
+            const waysVal = waysToSum(value, diceCount)
+            const losingVals = getLosingValues(diceCount)
+            const waysLosing = losingVals.reduce((acc, lv) => acc + waysToSum(lv, diceCount), 0)
+            const odds = waysVal > 0 ? (waysLosing / waysVal) : 0
+            const baseVal = numberValueMap[value] || 5
+            const payout = Math.floor(baseVal * odds) + (cycle * 200)
+            deltaScore = payout > 0 ? payout : 10
+            setRollCount(0)
+            setStormyMap({})
+            totalDmg = 0
             // Zero-Cycle bonus: extra 100 if this point was set on the very first roll
             if (zeroCycleActive) {
-                deltaScore += 100
+                deltaScore  = deltaScore * 2
                 setZeroCycleActive(false)
-                finalMsg = `You rolled the Point (${value}) — +${deltaScore} points! (Zero-Cycle bonus!)`
+                finalMsg = `POINT ${WORD_NUMBERS[value]} SECURED — +${deltaScore} budget! (Zero-Cycle bonus!)`
                 new Audio('audio/Airhorn.mp3').play();
             } else {
-                finalMsg = `You rolled the Point (${value}) — +100 points!`
+                finalMsg = `POINT ${WORD_NUMBERS[value]} SECURED — +${deltaScore} budget!`
                 new Audio('audio/Tada.mp3').play();
             }
         } else if (losing.includes(value)) {
             nextLives = Math.max(0, lives - 1)
-            finalMsg = `Rolled a ${value} \nlost 1 life.`
+            finalMsg = `${WORD_NUMBERS[value]} — LIFE LOST`
             new Audio('audio/Buzzer.mp3').play();
         } else {
-            deltaScore = 10 // MAKE A FUNCTION CALL FOR THIS
-            finalMsg = `Rolled ${value} — +10 points.`
+            // dynamic payout based on per-number value and odds vs rolling the losing value(s)
+            const waysVal = waysToSum(value, diceCount)
+            const losingVals = getLosingValues(diceCount)
+            const waysLosing = losingVals.reduce((acc, lv) => acc + waysToSum(lv, diceCount), 0)
+            const odds = waysVal > 0 ? (waysLosing / waysVal) : 0
+            const baseVal = numberValueMap[value] || 5
+            const payout = Math.floor(baseVal * odds)
+            deltaScore = payout > 0 ? payout : 10
+            finalMsg = `${WORD_NUMBERS[value]} — +${deltaScore} budget`
             new Audio('audio/Cash.mp3').play();
             setZeroCycleActive(false)
-            setRollCount(rollCount + 1)
+            setRollCount((r) => r + 1)
             // continue the point cycle (do not end the point when neither the point nor losing values are rolled)
         }
 
         if (deltaScore) setScore((s) => s + deltaScore)
-        if (dmg) setHp(nextHp)
+        if (totalDmg) {setHp(nextHp); new Audio('audio/Hit.wav').play(); }
+
+        if (nextHp <= 0) {
+            nextLives = Math.max(0, lives - 1)
+            setHp(100);
+            new Audio('audio/Revive.mp3').play();
+        }
+
         setLives(nextLives)
 
-        // auto-end if HP or lives hit zero
         if (nextLives <= 0) {
             // end game; will be rendered via the ended screen
             setPhase('ended')
             return
         }
-        if (nextHp <= 0) {
-            setPhase('ended')
-            return
-        }
+
 
         // Do not change cycle or end the game immediately here. Show the result modal
         // and perform cycle increment / final end only after the player clicks Continue.
@@ -312,6 +385,7 @@ export default function Game() {
             setPoint(null)
             setShowPointModal(false)
             new Audio('audio/Swap.mp3').play();
+            if (cycle === 2 || cycle === 4) new Audio('audio/NewDice.mp3').play();
             // reset comeout-losing tracking for the new comeout
             setComeoutLosingCount(0)
             setLastRoll(null)
@@ -338,6 +412,49 @@ export default function Game() {
         setFaceAttrMap((m) => ({ ...m, [n]: a }))
     }
 
+    const buyNumberUpgrade = (n: number) => {
+        const lvl = numberUpgradeLevel[n] || 0
+        const cost = 5 * Math.pow(2, lvl)
+        if (score < cost) return
+        setScore((s) => s - cost)
+        new Audio('audio/Buy.mp3').play()
+        setNumberUpgradeLevel((prev) => ({ ...prev, [n]: lvl + 1 }))
+        setNumberValueMap((prev) => ({ ...prev, [n]: (prev[n] || 5) + cost }))
+    }
+
+    const buyPreAdd = () => {
+        const cost = 10 + 10 * preAddBought
+        if (score < cost) return
+        setScore((s) => s - cost)
+        new Audio('audio/Buy.mp3').play()
+        setPreAddBought((b) => b + 1)
+        setPrePlus((p) => p + 1)
+    }
+    const buyPreSub = () => {
+        const cost = 10 + 10 * preSubBought
+        if (score < cost) return
+        setScore((s) => s - cost)
+        new Audio('audio/Buy.mp3').play()
+        setPreSubBought((b) => b + 1)
+        setPreMinus((p) => p + 1)
+    }
+    const buyPostAdd = () => {
+        const cost = 100 * Math.pow(2, postAddBought)
+        if (score < cost) return
+        setScore((s) => s - cost)
+        new Audio('audio/Buy.mp3').play()
+        setPostAddBought((b) => b + 1)
+        setPostPlus((p) => p + 1)
+    }
+    const buyPostSub = () => {
+        const cost = 100 * Math.pow(2, postSubBought)
+        if (score < cost) return
+        setScore((s) => s - cost)
+        new Audio('audio/Buy.mp3').play()
+        setPostSubBought((b) => b + 1)
+        setPostMinus((p) => p + 1)
+    }
+
     // expose helper setters for the console / dev tooling (prevents unused local errors)
     ;(globalThis as any).__gameHelpers = {
         setHpDamage,
@@ -348,7 +465,7 @@ export default function Game() {
     function getLosingValues(diceCount: number) {
         if (diceCount === 2) return [7]
         if (diceCount === 3) return [10, 11]
-        if (diceCount === 4) return [13, 14, 15]
+        if (diceCount === 4) return [12, 14, 16]
         return [7]
     }
 
@@ -356,6 +473,11 @@ export default function Game() {
     const minSum = Math.max(1, diceCount)
     const maxSum = diceCount * 6
     const NUMBERS = Array.from({ length: maxSum - minSum + 1 }, (_, i) => i + minSum)
+
+    const preAddCost = 10 + 10 * preAddBought
+    const preSubCost = 10 + 10 * preSubBought
+    const postAddCost = 100 * Math.pow(2, postAddBought)
+    const postSubCost = 100 * Math.pow(2, postSubBought)
 
     // format score as 8 digits with muted leading zeros
     const formattedScore = String(score).padStart(5, '0')
@@ -372,12 +494,12 @@ export default function Game() {
             // show message then redirect after 3s
             new Audio('audio/Tada.mp3').play();
             t = setTimeout(() => {
-                try { window.location.href = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } catch (e) { try { window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank') } catch {} }
+                try { window.location.href = 'https://www.youtube.com/watch?v=yPYZpwSpKmA' } catch (e) { try { window.open('https://www.youtube.com/watch?v=yPYZpwSpKmA', '_blank') } catch {} }
             }, 3000)
         } else if (grade === 'F') {
             new Audio('audio/Wompwomp.mp3').play();
             t = setTimeout(() => {
-                try { window.location.href = 'https://www.youtube.com/watch?v=b1cTSxu8O8c' } catch (e) { try { window.open('https://www.youtube.com/watch?v=b1cTSxu8O8c', '_blank') } catch {} }
+                try { window.location.href = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } catch (e) { try { window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank') } catch {} }
             }, 5000)
         }
         return () => { if (t) clearTimeout(t) }
@@ -386,11 +508,12 @@ export default function Game() {
 
     function computeGrade() {
         if (lives <= 0) return 'F'
-        if (score > 2000 && allCyclesCompleted) return 'SS'
-        if (score > 1500) return 'S'
-        if (score > 1000) return 'A'
-        if (score > 500) return 'B'
-        return 'C'
+        if (score > 7000) return 'SS'
+        if (score > 4000) return 'S'
+        if (score > 2000) return 'A'
+        if (score > 100) return 'B'
+        if (score > 500) return 'C'
+        return 'D'
     }
 
     // animate scoreboard digits using CSS ::before/::after slides
@@ -449,6 +572,28 @@ export default function Game() {
             pendingTargetDigitsRef.current = null
         }
     }, [score])
+
+    // update stormy numbers based on roll progress within the current point cycle
+    useEffect(() => {
+        const diceCountForCycle = 2 + (cycle >= 3 ? 1 : 0) + (cycle >= 5 ? 1 : 0)
+        const minSum = Math.max(1, diceCountForCycle)
+        const maxSum = diceCountForCycle * 6
+        const losing = getLosingValues(diceCountForCycle)
+
+        // number of extreme pairs that should be active. After the 3rd continuing roll,
+        // the first pair (min/max) becomes stormy; each subsequent continuing roll
+        // activates the next inward pair.
+        const activatedPairs = Math.max(0, rollCount - 2)
+        const map: Record<number, boolean> = {}
+        for (let n = minSum; n <= maxSum; n++) map[n] = false
+        for (let i = 0; i < activatedPairs; i++) {
+            const low = minSum + i
+            const high = maxSum - i
+            if (!losing.includes(low)) map[low] = true
+            if (!losing.includes(high)) map[high] = true
+        }
+        setStormyMap(map)
+    }, [rollCount, cycle, phase])
     const rootClass = "game-root " + (phase === 'point' ? 'point-active' : '') + (phase === 'ended' ? ' ended' : '')
 
     return (
@@ -463,11 +608,13 @@ export default function Game() {
                     </div>
                     <div className="meter">
                         <div className="meter-track">
-                            <div className="meter-fill" style={{ width: `${Math.max(0, Math.min(100, Math.round((score / 2000) * 100)))}%` }} />
-                            <div className="marker" style={{ left: `${Math.max(0, Math.min(100, Math.round((score / 2000) * 100)))}%` }}>{computeGrade()}</div>
+                            <div className="meter-fill" style={{ width: `${Math.max(0, Math.min(100, Math.round((score / 7000) * 100)))}%` }} />
                         </div>
                     </div>
-                    <h3 className="grade-letter">{computeGrade()}</h3>
+                    <h3 className="grade-letter">Rating: {computeGrade()}</h3>
+                    {computeGrade() !== 'SS' && computeGrade() !== 'F' && <div className="intro">Good job, but not enough funds.</div>}
+                    {computeGrade() === 'F' && <div className="intro">YOU DIED... Teleporting in 5 seconds...</div>}
+                    {computeGrade() === 'SS' && <div className="intro">YOU CLEARED THE CHALLENGE! Teleporting in 5 seconds...</div>}
                 </div>
             ) : (
                 <>
@@ -494,15 +641,32 @@ export default function Game() {
                 </div>
             </header> */}
 
-                    <main className={"play-area" + ((resultModal.visible || awaitingPost) ? ' modal-open' : '')}>
-                <h1 className="main-title">{phase === 'comeout' ? 'Roll.' : `Cycle ${cycle}`}</h1> <br/>
+            <main className={"play-area" + ((resultModal.visible || awaitingPost) ? ' modal-open' : '')}>
+                <h1 className="main-title">{phase === 'comeout' ? 'Yoshiroll.' : `Cycle ${cycle}`}</h1> <br/>
 
                 <div className="dice-row">
                     <Dice value={die1} rolling={rolling && die1 === 0} onClick={roll} faceAttr={faceAttrMap[die1]} />
                     <Dice value={die2} rolling={rolling && die2 === 0} onClick={roll} faceAttr={faceAttrMap[die2]} />
                     {diceCount >= 3 && <Dice value={die3} rolling={rolling && die3 === 0} onClick={roll} faceAttr={faceAttrMap[die3]} />}
                     {diceCount >= 4 && <Dice value={die4} rolling={rolling && die4 === 0} onClick={roll} faceAttr={faceAttrMap[die4]} />}
-                </div> <br/> <br/>
+                </div>
+                {phase === 'point' && !awaitingPost && !rolling && !resultModal.visible && <div className="intro">
+                    CLICK DICE TO ROLL <br/><br/>
+                </div> }
+
+            {phase === 'point' && <div className="pre-adjust-display">{pendingPreAdjust >= 0 ? `+${pendingPreAdjust}` : pendingPreAdjust}</div>}
+            {phase === 'point' && !rolling && !awaitingPost && !resultModal.visible && <div className="controls">
+                    <div className="pre-controls">
+                        <label className="pre-label">Stack Pre-Adjusts</label>
+                        <div className="post-actions">
+                            <button onClick={() => setPendingPreAdjust((p) => Math.min(p + 1, prePlus))} disabled={prePlus <= 0}>+1 (x{prePlus})</button>
+                            <button onClick={() => setPendingPreAdjust((p) => Math.max(p - 1, -preMinus))} disabled={preMinus <= 0}>-1 (x{preMinus})</button>
+                            <button onClick={() => setPendingPreAdjust(0)}>Clear</button>
+                        </div>
+                    </div>
+                </div> }
+
+                <br/> <br/>
 
                 {(phase === 'point' || comeoutLosingCount > 0) && (
                     <div className="health-row">
@@ -514,33 +678,6 @@ export default function Game() {
                         </div>
                     </div>
                 )}
-
-
-
-                {/* <div className="controls">
-                    <div className="pre-controls">
-                        <label>Adjust</label>
-                        <button
-                            onClick={() => setPendingPreAdjust((p) => (p === 1 ? 0 : 1))}
-                            disabled={prePlus <= 0}
-                        >
-                            +1
-                        </button>
-                        <button
-                            onClick={() => setPendingPreAdjust((p) => (p === -1 ? 0 : -1))}
-                            disabled={preMinus <= 0}
-                        >
-                            -1
-                        </button>
-                        <div className="small">Selected: {pendingPreAdjust}</div>
-                    </div>
-                    <div className="post-controls">
-                        <label>Post-adjust (use after roll):</label>
-                        <button onClick={() => applyPostAdjust(1)} disabled={!awaitingPost || postPlus <= 0}>+1</button>
-                        <button onClick={() => applyPostAdjust(-1)} disabled={!awaitingPost || postMinus <= 0}>-1</button>
-                        <button onClick={() => finalizeNoPost()} disabled={!awaitingPost}>Confirm</button>
-                    </div>
-                </div> */}
 
                 {/* result messages are shown in modal */}
 
@@ -562,6 +699,8 @@ export default function Game() {
                     />
                 )}
 
+
+
                 <section className="bottom-panel">
                     <div className="numbers">
                         {NUMBERS.map((n) => {
@@ -569,6 +708,8 @@ export default function Game() {
                             const style: React.CSSProperties = {}
                             style.zIndex = 10
                             const losing = getLosingValues(diceCount)
+                            const isStorm = !!stormyMap[n]
+                            const isUpgradeable = phase === 'comeout' && cycle >= 2 && !losing.includes(n)
                             // highlight the current point first
                             if (n === point) style.background = '#81e6d9'
                             else if (losing.includes(n)) {
@@ -581,10 +722,21 @@ export default function Game() {
                                 }
                             }
                             if (attr && attr.color) style.background = attr.color
+
+                            const displayValue = numberValueMap[n] || 5
                             return (
-                                <div key={n} className="num" style={style}>
+                                <div
+                                    key={n}
+                                    className={"num" + (isUpgradeable ? ' clickable' : '')}
+                                    style={style}
+                                    onClick={() => { if (isUpgradeable) buyNumberUpgrade(n) }}
+                                >
                                     {lastRoll === n && <div className="v-marker">V</div>}
-                                    <div className="num-label">{n}{attr && attr.label ? ` • ${attr.label}` : ''}</div>
+                                    <div className={"num-label" + (isStorm ? ' stormy' : '')}>
+                                        {n}{attr && attr.label ? ` • ${attr.label}` : ''}
+                                    </div>
+                                    {!losing.includes(n) && <div className="num-value">Lv. {Math.log(displayValue / 5) / Math.log(2) + 1}</div>}
+                                    {cycle > 1 && !losing.includes(n) && phase === 'comeout' && <div className="num-value">{displayValue}💰</div>}
                                 </div>
                             )
                         })}
@@ -622,6 +774,8 @@ export default function Game() {
                 {/* dice-grid background component */}
                 {phase === 'point' && <DiceGrid />}
 
+                {phase === 'point' && rollCount >= 3 && <div className="intro storm"> STORM DAMAGE: {stormclamp(Math.pow(2, Math.max(0, rollCount - 3)))}% </div>}
+
                 <div className="scoreboard">
                     {displayDigits.map((d, i) => {
                         const oldDigit = d
@@ -644,10 +798,22 @@ export default function Game() {
             )}
             {cycle === 1 && phase !== 'ended' && <div className="intro">
                 You have 6 cycles to make 7,000 budget. <br/>
-                Clear the challenge, and roll into Yoshie's treasure trove. <br/>
-                Run out of HP, and face the consequences of memery.
+                Clear the challenge, and get blessed by Yoshie. <br/>
+                Lose your 3 lives, and get memed. <br/>
+                (Volume Warning: Turn your sound DOWN)
             </div>
             }
+            {cycle >= 2 && phase === 'comeout' && <div className="intro">
+                Click the numbers to upgrade them. <br/>
+                Purchase adds and subs below:
+            </div>
+            }
+            {cycle >= 2 && phase == 'comeout' && <div className="shop">
+                <button onClick={buyPreAdd} disabled={score < preAddCost}>Buy a Pre-Add (x{prePlus}) — {preAddCost}💰</button>
+                <button onClick={buyPreSub} disabled={score < preSubCost}>Buy a Pre-Sub (x{preMinus}) — {preSubCost}💰</button>
+                <button onClick={buyPostAdd} disabled={score < postAddCost}>Buy a Post-Add (x{postPlus}) — {postAddCost}💰</button>
+                <button onClick={buyPostSub} disabled={score < postSubCost}>Buy  Post-Sub (x{postMinus}) — {postSubCost}💰</button>
+            </div>}
             {cycle === 3 && phase !== 'ended' && <div className="intro">
                 Watch out, here comes another dice into play.
             </div>

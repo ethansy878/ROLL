@@ -160,6 +160,58 @@ h1 {
     font-weight: 700
 }
 
+.num .num-label.stormy {
+    color: #7c3aed;
+    animation: storm-shake 0.9s ease-in-out infinite;
+}
+
+@keyframes storm-shake {
+    0% { transform: translateX(0) }
+    25% { transform: translateX(-1px) }
+    50% { transform: translateX(1px) }
+    75% { transform: translateX(-1px) }
+    100% { transform: translateX(0) }
+}
+
+.num-value {
+    font-size: 12px;
+    opacity: 0.9;
+    margin-top: 4px;
+    font-weight: 600;
+}
+
+.num.clickable {
+    cursor: pointer;
+    box-shadow: 0 0 0 2px rgba(124,58,237,0.06);
+}
+
+.pre-adjust-display {
+    font-family: 'HSR', sans-serif;
+    display: static;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    height: 44px;
+    margin-left: 12px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    font-weight: 800;
+    font-size: 44px;
+}
+
+.pre-label {
+    font-family: 'HSR', sans-serif;
+}
+
+.shop {
+    margin-top: 12px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+}
+.shop button { padding: 8px 12px }
+
 .hp-input {
     width: 60px
 }
@@ -662,4 +714,12 @@ button:disabled {
     gap: 8px;
     justify-content: center;
     margin-top: 12px
+}
+
+.storm {
+    color: #7c3aed;
+}
+
+.shop {
+    font-family: 'HSR', sans-serif;
 }
