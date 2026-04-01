@@ -5,6 +5,8 @@ import DiceGrid from './components/DiceGrid'
 
 type Attr = { label?: string; color?: string }
 
+const bgm = new Audio('audio/Cosmicon.mp3')
+
 const WORD_NUMBERS = [
     'ZERO','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE',
     'THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN','TWENTY',
@@ -237,6 +239,7 @@ export default function Game() {
                     setShowPointModal(true)
                     setRolling(false)
                     new Audio('audio/Swap.mp3').play()
+                    if (cycle === 1) bgm.play()
                 }
             } else if (phase === 'point') {
                 // allow post-adjust before final evaluation
@@ -428,7 +431,7 @@ export default function Game() {
     }
 
     const buyPreAdd = () => {
-        const cost = 10 + 2 * preAddBought
+        const cost = 5 * Math.pow(2, preAddBought)
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -436,7 +439,7 @@ export default function Game() {
         setPrePlus((p) => p + 1)
     }
     const buyPreSub = () => {
-        const cost = 10 + 2 * preSubBought
+        const cost = 5 * Math.pow(2, preSubBought)
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -444,7 +447,7 @@ export default function Game() {
         setPreMinus((p) => p + 1)
     }
     const buyPostAdd = () => {
-        const cost = 50 * Math.pow(2, postAddBought)
+        const cost = 100 * Math.pow(2, postAddBought)
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -452,7 +455,7 @@ export default function Game() {
         setPostPlus((p) => p + 1)
     }
     const buyPostSub = () => {
-        const cost = 50 * Math.pow(2, postSubBought)
+        const cost = 100 * Math.pow(2, postSubBought)
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -493,6 +496,7 @@ export default function Game() {
     // handle redirects on end screen
     useEffect(() => {
         if (phase !== 'ended') return
+        bgm.pause()
         const grade = computeGrade()
         let t: any = null
         if (grade === 'S') {
