@@ -4,6 +4,7 @@ import ogPlugin from 'vite-plugin-open-graph'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/Yoshiroll/',
   plugins: [react(), ogPlugin({
       basic: {
         title: 'Yoshiroll',
