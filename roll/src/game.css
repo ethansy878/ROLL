@@ -360,6 +360,28 @@ button {
     font-size: 32px;
 }
 
+/* Yoshie face image for die value 1 */
+.yoshie-wrap {
+    width: 32%;
+    height: 32%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.yoshie-face {
+    width: 110%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* Invert Yoshie colors during the point cycle so the central dot appears dark like pips */
+.game-root.point-active .yoshie-face {
+    filter: invert(1) grayscale(1) contrast(1.05);
+    transition: filter 180ms ease;
+}
+
 /* small dice used in the background grid */
 .dice.small {
     width: 56px;

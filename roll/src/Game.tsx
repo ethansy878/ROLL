@@ -68,6 +68,10 @@ function Dice({
         <button className={"dice " + (rolling ? 'rolling' : '')} onClick={onClick} aria-label={`Die ${value}`}>
             {value === 0 || rolling ? (
                 <div className="rolling-face">…</div>
+            ) : value === 1 ? (
+                <div className="yoshie-wrap" aria-hidden>
+                    <img src="/YoshieTrace.svg" alt="Yoshie" className="yoshie-face" />
+                </div>
             ) : (
                 <div className="pips" aria-hidden>
                     {Array.from({ length: 9 }).map((_, i) => (
@@ -293,8 +297,9 @@ export default function Game() {
             const waysLosing = losingVals.reduce((acc, lv) => acc + waysToSum(lv, diceCount), 0)
             const odds = waysVal > 0 ? (waysLosing / waysVal) : 0
             const baseVal = numberValueMap[value] || 5
-            const payout = Math.floor(baseVal * odds) + (cycle * 200)
-            deltaScore = payout > 0 ? payout : 10
+            const payout = Math.floor(baseVal * odds)
+            const bonus = (cycle * 200)
+            deltaScore = payout > 0 ? (payout + bonus) : 10
             setRollCount(0)
             setStormyMap({})
             totalDmg = 0
@@ -302,10 +307,10 @@ export default function Game() {
             if (zeroCycleActive) {
                 deltaScore  = deltaScore * 2
                 setZeroCycleActive(false)
-                finalMsg = `POINT ${WORD_NUMBERS[value]} SECURED — +${deltaScore} budget! (Zero-Cycle bonus!)`
+                finalMsg = `POINT ${WORD_NUMBERS[value]} SECURED — +${payout * 2} budget, +${bonus * 2} bonus (Zero-Cycle - X2)`
                 new Audio('audio/Airhorn.mp3').play();
             } else {
-                finalMsg = `POINT ${WORD_NUMBERS[value]} SECURED — +${deltaScore} budget!`
+                finalMsg = `POINT ${WORD_NUMBERS[value]} SECURED — +${payout} budget, +${bonus} bonus`
                 new Audio('audio/Tada.mp3').play();
             }
         } else if (losing.includes(value)) {
@@ -423,7 +428,7 @@ export default function Game() {
     }
 
     const buyPreAdd = () => {
-        const cost = 10 + 10 * preAddBought
+        const cost = 10 + 2 * preAddBought
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -431,7 +436,7 @@ export default function Game() {
         setPrePlus((p) => p + 1)
     }
     const buyPreSub = () => {
-        const cost = 10 + 10 * preSubBought
+        const cost = 10 + 2 * preSubBought
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -439,7 +444,7 @@ export default function Game() {
         setPreMinus((p) => p + 1)
     }
     const buyPostAdd = () => {
-        const cost = 100 * Math.pow(2, postAddBought)
+        const cost = 50 * Math.pow(2, postAddBought)
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -447,7 +452,7 @@ export default function Game() {
         setPostPlus((p) => p + 1)
     }
     const buyPostSub = () => {
-        const cost = 100 * Math.pow(2, postSubBought)
+        const cost = 50 * Math.pow(2, postSubBought)
         if (score < cost) return
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
@@ -474,10 +479,10 @@ export default function Game() {
     const maxSum = diceCount * 6
     const NUMBERS = Array.from({ length: maxSum - minSum + 1 }, (_, i) => i + minSum)
 
-    const preAddCost = 10 + 10 * preAddBought
-    const preSubCost = 10 + 10 * preSubBought
-    const postAddCost = 100 * Math.pow(2, postAddBought)
-    const postSubCost = 100 * Math.pow(2, postSubBought)
+    const preAddCost = 10 + 2 * preAddBought
+    const preSubCost = 10 + 2 * preSubBought
+    const postAddCost = 50 * Math.pow(2, postAddBought)
+    const postSubCost = 50 * Math.pow(2, postSubBought)
 
     // format score as 8 digits with muted leading zeros
     const formattedScore = String(score).padStart(5, '0')
@@ -490,13 +495,13 @@ export default function Game() {
         if (phase !== 'ended') return
         const grade = computeGrade()
         let t: any = null
-        if (grade === 'SS') {
+        if (grade === 'S') {
             // show message then redirect after 3s
             new Audio('audio/Tada.mp3').play();
             t = setTimeout(() => {
                 try { window.location.href = 'https://www.youtube.com/watch?v=yPYZpwSpKmA' } catch (e) { try { window.open('https://www.youtube.com/watch?v=yPYZpwSpKmA', '_blank') } catch {} }
             }, 3000)
-        } else if (grade === 'F') {
+        } else if (grade === 'X') {
             new Audio('audio/Wompwomp.mp3').play();
             t = setTimeout(() => {
                 try { window.location.href = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' } catch (e) { try { window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank') } catch {} }
@@ -507,13 +512,13 @@ export default function Game() {
     }, [phase])
 
     function computeGrade() {
-        if (lives <= 0) return 'F'
-        if (score > 7000) return 'SS'
-        if (score > 4000) return 'S'
-        if (score > 2000) return 'A'
-        if (score > 100) return 'B'
-        if (score > 500) return 'C'
-        return 'D'
+        if (lives <= 0) return 'X'
+        if (score > 10000) return 'S'
+        if (score > 8000) return 'A'
+        if (score > 6000) return 'B'
+        if (score > 4000) return 'C'
+        if (score > 2000) return 'D'
+        return 'F'
     }
 
     // animate scoreboard digits using CSS ::before/::after slides
@@ -562,7 +567,7 @@ export default function Game() {
         const finalTimer = window.setTimeout(() => {
             pendingTargetDigitsRef.current = null
             prevScoreRef.current = score
-            setAnimatingDigits(Array(8).fill(false))
+            setAnimatingDigits(Array(5).fill(false))
         }, base + targetDigits.length * 80 + 50)
         digitTimeoutsRef.current.push(finalTimer)
 
@@ -608,13 +613,13 @@ export default function Game() {
                     </div>
                     <div className="meter">
                         <div className="meter-track">
-                            <div className="meter-fill" style={{ width: `${Math.max(0, Math.min(100, Math.round((score / 7000) * 100)))}%` }} />
+                            <div className="meter-fill" style={{ width: `${Math.max(0, Math.min(100, Math.round((score / 10000) * 100)))}%` }} />
                         </div>
                     </div>
                     <h3 className="grade-letter">Rating: {computeGrade()}</h3>
-                    {computeGrade() !== 'SS' && computeGrade() !== 'F' && <div className="intro">Good job, but not enough funds.</div>}
-                    {computeGrade() === 'F' && <div className="intro">YOU DIED... Teleporting in 5 seconds...</div>}
-                    {computeGrade() === 'SS' && <div className="intro">YOU CLEARED THE CHALLENGE! Teleporting in 5 seconds...</div>}
+                    {computeGrade() !== 'S' && computeGrade() !== 'X' && <div className="intro">Good job, but not enough funds for Yoshie.</div>}
+                    {computeGrade() === 'X' && <div className="intro">YOU DIED... Teleporting in 5 seconds...</div>}
+                    {computeGrade() === 'S' && <div className="intro">YOU CLEARED THE CHALLENGE! Teleporting in 5 seconds...</div>}
                 </div>
             ) : (
                 <>
@@ -793,11 +798,16 @@ export default function Game() {
                     })}
                     <span className="score-icon">💰</span>
                 </div>
+                
                     </main>
                 </>
             )}
+            {score > 99999 && <div className="intro">
+                Wow! You have over 99,999 budget! The scoreboard may not function as expected! <br/>
+            </div>
+            }
             {cycle === 1 && phase !== 'ended' && <div className="intro">
-                You have 6 cycles to make 7,000 budget. <br/>
+                You have 6 cycles to make 10,000 budget. <br/>
                 Clear the challenge, and get blessed by Yoshie. <br/>
                 Lose your 3 lives, and get memed. <br/>
                 (Volume Warning: Turn your sound DOWN)
@@ -819,7 +829,7 @@ export default function Game() {
             </div>
             }
             {cycle === 5 && phase !== 'ended' && <div className="intro">
-                One more dice! Hope you're almost there!
+                One more dice! Good luck!
             </div>
             }
 
