@@ -752,3 +752,13 @@ button:disabled {
 .shop button {
     height: 100%;
 }
+
+@keyframes roll-shake {
+    0% { transform: translateY(0) }
+    50% { transform: translateY(-2px) }
+    100% { transform: translateY(0) }
+}
+
+.clickme {
+    animation: roll-shake 0.5s ease-in-out infinite;
+}

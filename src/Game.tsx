@@ -425,7 +425,7 @@ export default function Game() {
     const buyNumberUpgrade = (n: number) => {
         const lvl = numberUpgradeLevel[n] || 0
         const cost = 5 * Math.pow(2, lvl)
-        if (score < cost) return
+        if (score < cost) { new Audio('audio/No.mp3').play(); return}
         setScore((s) => s - cost)
         new Audio('audio/Buy.mp3').play()
         setNumberUpgradeLevel((prev) => ({ ...prev, [n]: lvl + 1 }))
@@ -638,6 +638,9 @@ export default function Game() {
 
             <main className={"play-area" + ((resultModal.visible || awaitingPost) ? ' modal-open' : '')}>
                 <h1 className="main-title">{phase === 'comeout' ? 'Yoshiroll.' : `Cycle ${cycle}`}</h1> <br/>
+                {phase === 'point' && !awaitingPost && !rolling && !resultModal.visible && <div className="intro clickme">
+                    CLICK DICE TO ROLL <br/>
+                </div> }
 
                 <div className="dice-row">
                     <Dice value={die1} rolling={rolling && die1 === 0} onClick={roll} faceAttr={faceAttrMap[die1]} />
@@ -645,9 +648,7 @@ export default function Game() {
                     {diceCount >= 3 && <Dice value={die3} rolling={rolling && die3 === 0} onClick={roll} faceAttr={faceAttrMap[die3]} />}
                     {diceCount >= 4 && <Dice value={die4} rolling={rolling && die4 === 0} onClick={roll} faceAttr={faceAttrMap[die4]} />}
                 </div>
-                {phase === 'point' && !awaitingPost && !rolling && !resultModal.visible && <div className="intro">
-                    CLICK DICE TO ROLL <br/><br/>
-                </div> }
+
 
             {phase === 'point' && <div className="pre-adjust-display">{pendingPreAdjust >= 0 ? `+${pendingPreAdjust}` : pendingPreAdjust}</div>}
             {phase === 'point' && !rolling && !awaitingPost && !resultModal.visible && <div className="controls">
@@ -794,7 +795,7 @@ export default function Game() {
                 Wow! You have over 99,999 budget! The scoreboard may not function as expected! <br/>
             </div>
             }
-            {cycle === 1 && phase !== 'ended' && <div className="intro">
+            {cycle === 1 && phase !== 'point' && <div className="intro">
                 You have 6 cycles to make 10,000 budget. <br/>
                 Clear the challenge? Blessed by Yoshie. <br/>
                 Poverty or death? Get memed. <br/>

@@ -27,9 +27,12 @@ export default function CombinedModal({ point, result = null, awaitingPost = fal
   }
 
   const lines = [
+    `INSTRUCTIONS`,
     `Roll a ${point}, complete the cycle.`,
     `Roll a ${losingStr(losing)}, lose a life.`,
-    'Roll anything else, gain budget. Numbers at the ends are worth more.',
+    'Roll anything else, gain budget.',
+    'Numbers at the ends are worth more.',
+    'The storm forms after the third roll.'
   ]
 
   const [revealed, setRevealed] = useState(0)
