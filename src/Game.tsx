@@ -810,7 +810,7 @@ export default function Game() {
             {cycle >= 2 && phase == 'comeout' && <div className="shop">
                 <button onClick={buyPreSub} disabled={score < preSubCost}>Buy a Pre-Sub ({preMinus} owned) — {preSubCost}💰</button>
                 <button onClick={buyPreAdd} disabled={score < preAddCost}>Buy a Pre-Add ({prePlus} owned) — {preAddCost}💰</button>
-                <button onClick={buyPostSub} disabled={score < postSubCost}>Buy  Post-Sub ({postMinus} owned) — {postSubCost}💰</button>
+                <button onClick={buyPostSub} disabled={score < postSubCost}>Buy a Post-Sub ({postMinus} owned) — {postSubCost}💰</button>
                 <button onClick={buyPostAdd} disabled={score < postAddCost}>Buy a Post-Add ({postPlus} owned) — {postAddCost}💰</button>
             </div>}
             {cycle === 3 && phase !== 'ended' && <div className="intro">
